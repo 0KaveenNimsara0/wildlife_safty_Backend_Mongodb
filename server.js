@@ -113,5 +113,118 @@ app.post('/api/posts/:postId/like', async (req, res) => {
   }
 });
 
+// Update post
+app.put('/api/posts/:postId', async (req, res) => {
+  try {
+    const { animalName, experience } = req.body;
+    const post = await Post.findByIdAndUpdate(
+      req.params.postId,
+      { animalName, experience, updatedAt: Date.now() },
+      { new: true }
+    );
+
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    res.json(post);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Delete post
+app.delete('/api/posts/:postId', async (req, res) => {
+  try {
+    const post = await Post.findByIdAndDelete(req.params.postId);
+
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    // Delete associated comments
+    await Comment.deleteMany({ postId: req.params.postId });
+
+    res.json({ message: 'Post deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Update comment
+app.put('/api/posts/:postId/comments/:commentId', async (req, res) => {
+  try {
+    const { text } = req.body;
+    const comment = await Comment.findByIdAndUpdate(
+      req.params.commentId,
+      { text, updatedAt: Date.now(), isEdited: true },
+      { new: true }
+    );
+
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    res.json(comment);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Delete comment
+app.delete('/api/posts/:postId/comments/:commentId', async (req, res) => {
+  try {
+    const comment = await Comment.findByIdAndDelete(req.params.commentId);
+
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    // Remove comment from post
+    await Post.findByIdAndUpdate(req.params.postId, {
+      $pull: { comments: req.params.commentId }
+    });
+
+    res.json({ message: 'Comment deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Like comment
+app.post('/api/posts/:postId/comments/:commentId/like', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const comment = await Comment.findById(req.params.commentId);
+
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    // Add likes field to comment schema if it doesn't exist
+    if (!comment.likedBy) {
+      comment.likedBy = [];
+      comment.likes = 0;
+    }
+
+    const userIndex = comment.likedBy.indexOf(userId);
+    
+    if (userIndex === -1) {
+      // Add like
+      comment.likedBy.push(userId);
+      comment.likes = comment.likedBy.length;
+    } else {
+      // Remove like
+      comment.likedBy.splice(userIndex, 1);
+      comment.likes = comment.likedBy.length;
+    }
+
+    await comment.save();
+    res.json(comment);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
