@@ -23,16 +23,9 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/wildguard
 // MongoDB Models
 const Post = require('./models/Post');
 const Comment = require('./models/Comment');
+const User = require('./models/User');
 
-// Configure Multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
-});
+const storage = multer.memoryStorage();
 
 const upload = multer({ storage });
 
@@ -228,6 +221,100 @@ app.post('/api/posts/:postId/comments/:commentId/like', async (req, res) => {
     res.json(comment);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// Profile picture routes
+app.post('/api/users/:uid/profile-picture', upload.single('profilePicture'), async (req, res) => {
+  try {
+    const { uid } = req.params;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Convert image to base64 for MongoDB storage
+    const imageBase64 = req.file.buffer.toString('base64');
+    
+    // Update or create user
+    const user = await User.findOneAndUpdate(
+      { uid: uid },
+      {
+        profilePicture: {
+          data: req.file.buffer,
+          contentType: req.file.mimetype
+        },
+        photoURL: `data:${req.file.mimetype};base64,${imageBase64}`,
+        updatedAt: new Date()
+      },
+      { upsert: true, new: true }
+    );
+
+    res.json({
+      success: true,
+      photoURL: user.photoURL,
+      message: 'Profile picture updated successfully'
+    });
+  } catch (error) {
+    console.error('Error uploading profile picture:', error);
+    res.status(500).json({ error: 'Failed to upload profile picture' });
+  }
+});
+
+// Get user profile
+app.get('/api/users/:uid', async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const user = await User.findOne({ uid });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+      profilePicture: user.profilePicture ? {
+        data: user.profilePicture.data.toString('base64'),
+        contentType: user.profilePicture.contentType
+      } : null
+    });
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// Update user profile
+app.put('/api/users/:uid', async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const { email, displayName } = req.body;
+
+    const user = await User.findOneAndUpdate(
+      { uid: uid },
+      {
+        email,
+        displayName,
+        updatedAt: new Date()
+      },
+      { new: true, upsert: true }
+    );
+
+    res.json({
+      success: true,
+      user: {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL
+      }
+    });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: 'Failed to update user' });
   }
 });
 
