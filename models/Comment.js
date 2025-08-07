@@ -13,6 +13,8 @@ const CommentSchema = new mongoose.Schema({
   authorName: { type: String, required: true },
   authorAvatar: { type: String, default: '' },
   text: { type: String, required: true },
+  likes: { type: Number, default: 0 }, // Legacy like count
+  likedBy: { type: [String], default: [] }, // Legacy likedBy array
   reactions: [ReactionSchema],
   totalReactions: { type: Number, default: 0 },
   replies: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }], // Store reply IDs
