@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 
@@ -14,7 +13,12 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/wildguard');
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/wildguard', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log('Connected to MongoDB'))
+.catch(err => console.error('MongoDB connection error:', err));
 
 // MongoDB Models
 const Post = require('./models/Post');
@@ -54,7 +58,15 @@ app.post('/api/posts', upload.single('photo'), async (req, res) => {
 
 app.get('/api/posts', async (req, res) => {
   try {
-    const posts = await Post.find().sort({ createdAt: -1 }).populate('comments');
+    const posts = await Post.find()
+      .sort({ createdAt: -1 })
+      .populate({
+        path: 'comments',
+        populate: {
+          path: 'replies',
+          model: 'Comment'
+        }
+      });
     res.json(posts);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -63,18 +75,24 @@ app.get('/api/posts', async (req, res) => {
 
 app.post('/api/posts/:postId/comments', async (req, res) => {
   try {
-    const { authorId, authorName, text } = req.body;
+    const { authorId, authorName, text, parentId } = req.body;
     
     const newComment = new Comment({
       postId: req.params.postId,
       authorId,
       authorName,
-      text
+      text,
+      parentId: parentId || null
     });
 
     await newComment.save();
     
-    // Add comment to post
+    if (parentId) {
+      await Comment.findByIdAndUpdate(parentId, {
+        $push: { replies: newComment._id }
+      });
+    }
+    
     await Post.findByIdAndUpdate(req.params.postId, {
       $push: { comments: newComment._id }
     });
@@ -97,11 +115,9 @@ app.post('/api/posts/:postId/like', async (req, res) => {
     const userIndex = post.likedBy.indexOf(userId);
     
     if (userIndex === -1) {
-      // Add like
       post.likedBy.push(userId);
       post.likes = post.likedBy.length;
     } else {
-      // Remove like
       post.likedBy.splice(userIndex, 1);
       post.likes = post.likedBy.length;
     }
@@ -113,7 +129,6 @@ app.post('/api/posts/:postId/like', async (req, res) => {
   }
 });
 
-// Update post
 app.put('/api/posts/:postId', async (req, res) => {
   try {
     const { animalName, experience } = req.body;
@@ -133,7 +148,6 @@ app.put('/api/posts/:postId', async (req, res) => {
   }
 });
 
-// Delete post
 app.delete('/api/posts/:postId', async (req, res) => {
   try {
     const post = await Post.findByIdAndDelete(req.params.postId);
@@ -142,16 +156,13 @@ app.delete('/api/posts/:postId', async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    // Delete associated comments
     await Comment.deleteMany({ postId: req.params.postId });
-
     res.json({ message: 'Post deleted successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// Update comment
 app.put('/api/posts/:postId/comments/:commentId', async (req, res) => {
   try {
     const { text } = req.body;
@@ -171,7 +182,6 @@ app.put('/api/posts/:postId/comments/:commentId', async (req, res) => {
   }
 });
 
-// Delete comment
 app.delete('/api/posts/:postId/comments/:commentId', async (req, res) => {
   try {
     const comment = await Comment.findByIdAndDelete(req.params.commentId);
@@ -180,7 +190,6 @@ app.delete('/api/posts/:postId/comments/:commentId', async (req, res) => {
       return res.status(404).json({ message: 'Comment not found' });
     }
 
-    // Remove comment from post
     await Post.findByIdAndUpdate(req.params.postId, {
       $pull: { comments: req.params.commentId }
     });
@@ -191,7 +200,6 @@ app.delete('/api/posts/:postId/comments/:commentId', async (req, res) => {
   }
 });
 
-// Like comment
 app.post('/api/posts/:postId/comments/:commentId/like', async (req, res) => {
   try {
     const { userId } = req.body;
@@ -201,7 +209,6 @@ app.post('/api/posts/:postId/comments/:commentId/like', async (req, res) => {
       return res.status(404).json({ message: 'Comment not found' });
     }
 
-    // Add likes field to comment schema if it doesn't exist
     if (!comment.likedBy) {
       comment.likedBy = [];
       comment.likes = 0;
@@ -210,11 +217,9 @@ app.post('/api/posts/:postId/comments/:commentId/like', async (req, res) => {
     const userIndex = comment.likedBy.indexOf(userId);
     
     if (userIndex === -1) {
-      // Add like
       comment.likedBy.push(userId);
       comment.likes = comment.likedBy.length;
     } else {
-      // Remove like
       comment.likedBy.splice(userIndex, 1);
       comment.likes = comment.likedBy.length;
     }
@@ -225,6 +230,10 @@ app.post('/api/posts/:postId/comments/:commentId/like', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// Import reaction routes
+const reactionRoutes = require('./routes/reactions');
+app.use('/api', reactionRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
