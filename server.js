@@ -322,5 +322,13 @@ app.put('/api/users/:uid', async (req, res) => {
 const reactionRoutes = require('./routes/reactions');
 app.use('/api', reactionRoutes);
 
+// Import admin routes
+const { router: adminAuthRoutes } = require('./routes/adminAuth');
+const adminUserRoutes = require('./routes/adminUsers');
+
+// Admin routes
+app.use('/api/admin/auth', adminAuthRoutes);
+app.use('/api/admin/users', adminUserRoutes);
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
