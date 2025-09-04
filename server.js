@@ -325,10 +325,22 @@ app.use('/api', reactionRoutes);
 // Import admin routes
 const { router: adminAuthRoutes } = require('./routes/adminAuth');
 const adminUserRoutes = require('./routes/adminUsers');
+const adminChatRoutes = require('./routes/adminChat');
+const adminArticlesRoutes = require('./routes/adminArticles');
+const { router: medicalOfficerAuthRoutes } = require('./routes/medicalOfficerAuth');
+const medicalOfficerChatRoutes = require('./routes/medicalOfficerChat');
+const medicalOfficerArticlesRoutes = require('./routes/medicalOfficerArticles');
 
 // Admin routes
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/admin/users', adminUserRoutes);
+app.use('/api/admin/chat', adminChatRoutes);
+app.use('/api/admin/articles', adminArticlesRoutes);
+
+// Medical officer routes
+app.use('/api/medical-officer/auth', medicalOfficerAuthRoutes);
+app.use('/api/medical-officer/chat', medicalOfficerChatRoutes);
+app.use('/api/medical-officer/articles', medicalOfficerArticlesRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

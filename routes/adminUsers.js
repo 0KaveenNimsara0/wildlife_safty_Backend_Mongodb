@@ -1,6 +1,7 @@
 
 const express = require('express');
 const User = require('../models/User');
+const MedicalOfficer = require('../models/MedicalOfficer');
 const { authenticateAdmin } = require('./adminAuth');
 const admin = require('../firebaseAdmin');
 
@@ -37,6 +38,131 @@ router.get('/', authenticateAdmin, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching users'
+    });
+  }
+});
+
+// Medical Officers routes
+
+// Get medical officers with pagination
+router.get('/medical-officers', authenticateAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const medicalOfficers = await MedicalOfficer.find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const totalMedicalOfficers = await MedicalOfficer.countDocuments();
+
+    res.json({
+      success: true,
+      medicalOfficers,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalMedicalOfficers / limit),
+        totalMedicalOfficers,
+        hasNext: page * limit < totalMedicalOfficers,
+        hasPrev: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Get medical officers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching medical officers'
+    });
+  }
+});
+
+// Search medical officers by name or email
+router.get('/medical-officers/search/:query', authenticateAdmin, async (req, res) => {
+  try {
+    const query = req.params.query;
+    const medicalOfficers = await MedicalOfficer.find({
+      $or: [
+        { email: { $regex: query, $options: 'i' } },
+        { name: { $regex: query, $options: 'i' } }
+      ]
+    }).limit(20);
+
+    res.json({
+      success: true,
+      medicalOfficers
+    });
+  } catch (error) {
+    console.error('Search medical officers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error searching medical officers'
+    });
+  }
+});
+
+// Update medical officer by ID
+router.put('/medical-officers/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { email, name, specialization, isApproved } = req.body;
+    const id = req.params.id;
+
+    const updateData = { email, name, specialization, updatedAt: new Date() };
+    if (typeof isApproved === 'boolean') {
+      updateData.isApproved = isApproved;
+    }
+
+    const updatedMedicalOfficer = await MedicalOfficer.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true }
+    );
+
+    if (!updatedMedicalOfficer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Medical officer not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Medical officer updated successfully',
+      medicalOfficer: updatedMedicalOfficer
+    });
+  } catch (error) {
+    console.error('Update medical officer error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error updating medical officer'
+    });
+  }
+});
+
+// Delete medical officer by ID
+router.delete('/medical-officers/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const deletedMedicalOfficer = await MedicalOfficer.findByIdAndDelete(id);
+
+    if (!deletedMedicalOfficer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Medical officer not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Medical officer deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete medical officer error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error deleting medical officer'
     });
   }
 });
@@ -187,6 +313,27 @@ router.get('/search/:query', authenticateAdmin, async (req, res) => {
   }
 });
 
+// Get Firebase users count
+router.get('/firebase-count', authenticateAdmin, async (req, res) => {
+  try {
+    const listUsersResult = await admin.auth().listUsers(1000); // Get up to 1000 users for count
+    const count = listUsersResult.users.length;
+
+    res.json({
+      success: true,
+      count
+    });
+  } catch (error) {
+    console.error('Get Firebase users count error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching Firebase users count'
+    });
+  }
+});
+
+module.exports = router;
+
 // Get user statistics
 router.get('/stats/overview', authenticateAdmin, async (req, res) => {
   try {
@@ -195,11 +342,18 @@ router.get('/stats/overview', authenticateAdmin, async (req, res) => {
       createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Last 30 days
     });
 
+    const totalMedicalOfficers = await MedicalOfficer.countDocuments();
+    const recentMedicalOfficers = await MedicalOfficer.countDocuments({
+      createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Last 30 days
+    });
+
     res.json({
       success: true,
       stats: {
         totalUsers,
-        recentUsers
+        recentUsers,
+        totalMedicalOfficers,
+        recentMedicalOfficers
       }
     });
   } catch (error) {
