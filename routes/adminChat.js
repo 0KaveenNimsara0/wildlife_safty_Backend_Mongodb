@@ -24,16 +24,17 @@ router.get('/messages', authenticateAdmin, async (req, res) => {
         let senderDetails = null;
 
         try {
-          if (message.senderType === 'user') {
-            const User = require('../models/User');
-            senderDetails = await User.findById(message.senderId).select('name email');
-          } else if (message.senderType === 'medical_officer') {
-            const MedicalOfficer = require('../models/MedicalOfficer');
-            senderDetails = await MedicalOfficer.findById(message.senderId).select('name email specialization');
-          } else if (message.senderType === 'admin') {
-            const Admin = require('../models/Admin');
-            senderDetails = await Admin.findById(message.senderId).select('name email');
-          }
+            if (message.senderType === 'user') {
+              const User = require('../models/User');
+              // Fix: query by uid instead of _id since User model uses uid as unique identifier
+              senderDetails = await User.findOne({ uid: message.senderId }).select('displayName email');
+            } else if (message.senderType === 'medical_officer') {
+              const MedicalOfficer = require('../models/MedicalOfficer');
+              senderDetails = await MedicalOfficer.findById(message.senderId).select('name email specialization');
+            } else if (message.senderType === 'admin') {
+              const Admin = require('../models/Admin');
+              senderDetails = await Admin.findById(message.senderId).select('name email');
+            }
         } catch (error) {
           console.error('Error fetching sender details:', error);
         }
@@ -149,10 +150,14 @@ router.post('/publish-message/:messageId', authenticateAdmin, async (req, res) =
     // Fetch sender details for the published message
     let authorDetails = null;
     try {
-      if (chatMessage.senderType === 'medical_officer') {
-        const MedicalOfficer = require('../models/MedicalOfficer');
-        authorDetails = await MedicalOfficer.findById(chatMessage.senderId).select('name email specialization');
-      }
+    if (chatMessage.senderType === 'medical_officer') {
+      const MedicalOfficer = require('../models/MedicalOfficer');
+      authorDetails = await MedicalOfficer.findById(chatMessage.senderId).select('name email specialization');
+    } else if (chatMessage.senderType === 'user') {
+      const User = require('../models/User');
+      // Fix: query by uid instead of _id
+      authorDetails = await User.findOne({ uid: chatMessage.senderId }).select('displayName email');
+    }
     } catch (error) {
       console.error('Error fetching author details:', error);
     }
