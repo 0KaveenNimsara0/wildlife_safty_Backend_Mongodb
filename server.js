@@ -330,6 +330,7 @@ const adminArticlesRoutes = require('./routes/adminArticles');
 const { router: medicalOfficerAuthRoutes } = require('./routes/medicalOfficerAuth');
 const medicalOfficerChatRoutes = require('./routes/medicalOfficerChat');
 const medicalOfficerArticlesRoutes = require('./routes/medicalOfficerArticles');
+const userChatRoutes = require('./routes/userChat');
 
 // Admin routes
 app.use('/api/admin/auth', adminAuthRoutes);
@@ -341,6 +342,9 @@ app.use('/api/admin/articles', adminArticlesRoutes);
 app.use('/api/medical-officer/auth', medicalOfficerAuthRoutes);
 app.use('/api/medical-officer/chat', medicalOfficerChatRoutes);
 app.use('/api/medical-officer/articles', medicalOfficerArticlesRoutes);
+
+// User chat routes
+app.use('/api/user/chat', userChatRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

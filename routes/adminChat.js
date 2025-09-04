@@ -12,16 +12,48 @@ router.get('/messages', authenticateAdmin, async (req, res) => {
     const skip = (page - 1) * limit;
 
     const messages = await ChatMessage.find()
-      .populate('sender', 'name email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
     const totalMessages = await ChatMessage.countDocuments();
 
+    // Manually fetch sender details for each message
+    const messagesWithSenderDetails = await Promise.all(
+      messages.map(async (message) => {
+        let senderDetails = null;
+
+        try {
+          if (message.senderType === 'user') {
+            const User = require('../models/User');
+            senderDetails = await User.findById(message.senderId).select('name email');
+          } else if (message.senderType === 'medical_officer') {
+            const MedicalOfficer = require('../models/MedicalOfficer');
+            senderDetails = await MedicalOfficer.findById(message.senderId).select('name email specialization');
+          } else if (message.senderType === 'admin') {
+            const Admin = require('../models/Admin');
+            senderDetails = await Admin.findById(message.senderId).select('name email');
+          }
+        } catch (error) {
+          console.error('Error fetching sender details:', error);
+        }
+
+        return {
+          ...message.toObject(),
+          sender: senderDetails ? {
+            _id: senderDetails._id,
+            name: senderDetails.name,
+            email: senderDetails.email,
+            type: message.senderType,
+            ...(senderDetails.specialization && { specialization: senderDetails.specialization })
+          } : null
+        };
+      })
+    );
+
     res.json({
       success: true,
-      messages,
+      messages: messagesWithSenderDetails,
       pagination: {
         currentPage: page,
         totalPages: Math.ceil(totalMessages / limit),
@@ -47,16 +79,42 @@ router.get('/published-messages', authenticateAdmin, async (req, res) => {
     const skip = (page - 1) * limit;
 
     const messages = await PublishedMessage.find()
-      .populate('author', 'name email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
     const totalMessages = await PublishedMessage.countDocuments();
 
+    // Manually fetch author details for each published message
+    const messagesWithAuthorDetails = await Promise.all(
+      messages.map(async (message) => {
+        let authorDetails = null;
+
+        try {
+          if (message.author.type === 'medical_officer') {
+            const MedicalOfficer = require('../models/MedicalOfficer');
+            authorDetails = await MedicalOfficer.findById(message.author.id).select('name email specialization');
+          }
+        } catch (error) {
+          console.error('Error fetching author details:', error);
+        }
+
+        return {
+          ...message.toObject(),
+          author: authorDetails ? {
+            ...message.author,
+            _id: authorDetails._id,
+            name: authorDetails.name,
+            email: authorDetails.email,
+            specialization: authorDetails.specialization
+          } : message.author
+        };
+      })
+    );
+
     res.json({
       success: true,
-      messages,
+      messages: messagesWithAuthorDetails,
       pagination: {
         currentPage: page,
         totalPages: Math.ceil(totalMessages / limit),
@@ -88,12 +146,36 @@ router.post('/publish-message/:messageId', authenticateAdmin, async (req, res) =
       });
     }
 
+    // Fetch sender details for the published message
+    let authorDetails = null;
+    try {
+      if (chatMessage.senderType === 'medical_officer') {
+        const MedicalOfficer = require('../models/MedicalOfficer');
+        authorDetails = await MedicalOfficer.findById(chatMessage.senderId).select('name email specialization');
+      }
+    } catch (error) {
+      console.error('Error fetching author details:', error);
+    }
+
     const publishedMessage = new PublishedMessage({
       title: title || chatMessage.message,
       content: content || chatMessage.message,
-      author: chatMessage.sender,
-      originalMessage: messageId,
-      publishedBy: req.admin._id
+      author: authorDetails ? {
+        id: authorDetails._id.toString(),
+        name: authorDetails.name,
+        type: 'medical_officer',
+        specialization: authorDetails.specialization
+      } : {
+        id: chatMessage.senderId,
+        name: 'Unknown',
+        type: chatMessage.senderType
+      },
+      originalMessageId: messageId,
+      publishedBy: {
+        id: req.admin._id.toString(),
+        name: req.admin.name,
+        type: 'admin'
+      }
     });
 
     await publishedMessage.save();

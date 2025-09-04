@@ -1,9 +1,11 @@
 const express = require('express');
 const ChatMessage = require('../models/ChatMessage');
-const User = require('../models/User');
-const { authenticateMedicalOfficer } = require('../middleware/auth_medical_officer');
+const MedicalOfficer = require('../models/MedicalOfficer');
+const { authenticateUserMongo } = require('../middleware/auth_mongo');
 
 const router = express.Router();
+
+const authenticateUser = authenticateUserMongo;
 
 // Helper function to generate conversation ID
 const generateConversationId = (senderId, receiverId, senderType, receiverType) => {
@@ -12,18 +14,39 @@ const generateConversationId = (senderId, receiverId, senderType, receiverType) 
   return `${types[0]}_${ids[0]}_${types[1]}_${ids[1]}`;
 };
 
-// Get conversations for medical officer
-router.get('/conversations', authenticateMedicalOfficer, async (req, res) => {
+// Get list of available medical officers
+router.get('/medical-officers', authenticateUser, async (req, res) => {
   try {
-    const medicalOfficerId = req.medicalOfficer._id.toString();
+    const medicalOfficers = await MedicalOfficer.find(
+      { isActive: true, isApproved: true },
+      'name specialization hospital email phoneNumber'
+    ).sort({ name: 1 });
 
-    // Find all conversations involving this medical officer
+    res.json({
+      success: true,
+      medicalOfficers
+    });
+  } catch (error) {
+    console.error('Get medical officers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Get user's conversations
+router.get('/conversations', authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.uid;
+
+    // Find all conversations involving this user
     const conversations = await ChatMessage.aggregate([
       {
         $match: {
           $or: [
-            { senderId: medicalOfficerId, senderType: 'medical_officer' },
-            { receiverId: medicalOfficerId, receiverType: 'medical_officer' }
+            { senderId: userId, senderType: 'user' },
+            { receiverId: userId, receiverType: 'user' }
           ]
         }
       },
@@ -40,8 +63,8 @@ router.get('/conversations', authenticateMedicalOfficer, async (req, res) => {
               $cond: [
                 {
                   $and: [
-                    { $eq: ['$receiverId', medicalOfficerId] },
-                    { $eq: ['$receiverType', 'medical_officer'] },
+                    { $eq: ['$receiverId', userId] },
+                    { $eq: ['$receiverType', 'user'] },
                     { $eq: ['$isRead', false] }
                   ]
                 },
@@ -57,29 +80,22 @@ router.get('/conversations', authenticateMedicalOfficer, async (req, res) => {
       }
     ]);
 
-    // Add user details to conversations
+    // Add medical officer details to conversations
     const conversationsWithDetails = await Promise.all(
       conversations.map(async (conv) => {
         const lastMessage = conv.lastMessage;
-        let userId = null;
+        let medicalOfficerId = null;
 
-        if (lastMessage.senderType === 'user') {
-          userId = lastMessage.senderId;
-        } else if (lastMessage.receiverType === 'user') {
-          userId = lastMessage.receiverId;
+        if (lastMessage.senderType === 'medical_officer') {
+          medicalOfficerId = lastMessage.senderId;
+        } else if (lastMessage.receiverType === 'medical_officer') {
+          medicalOfficerId = lastMessage.receiverId;
         }
 
-        const mongoose = require('mongoose');
-        if (userId) {
-          let user = null;
-          // Check if userId is a valid ObjectId
-          if (mongoose.Types.ObjectId.isValid(userId)) {
-            user = await User.findOne({ _id: userId }).select('displayName email photoURL uid');
-          }
-          if (!user) {
-            user = await User.findOne({ uid: userId }).select('displayName email photoURL uid');
-          }
-          conv.user = user;
+        if (medicalOfficerId) {
+          const medicalOfficer = await MedicalOfficer.findById(medicalOfficerId)
+            .select('name specialization hospital');
+          conv.medicalOfficer = medicalOfficer;
         }
 
         return conv;
@@ -100,17 +116,17 @@ router.get('/conversations', authenticateMedicalOfficer, async (req, res) => {
 });
 
 // Get messages for a specific conversation
-router.get('/messages/:conversationId', authenticateMedicalOfficer, async (req, res) => {
+router.get('/messages/:conversationId', authenticateUser, async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const medicalOfficerId = req.medicalOfficer._id.toString();
+    const userId = req.user.uid;
 
-    // Verify medical officer is part of this conversation
+    // Verify user is part of this conversation
     const conversationCheck = await ChatMessage.findOne({
       conversationId,
       $or: [
-        { senderId: medicalOfficerId, senderType: 'medical_officer' },
-        { receiverId: medicalOfficerId, receiverType: 'medical_officer' }
+        { senderId: userId, senderType: 'user' },
+        { receiverId: userId, receiverType: 'user' }
       ]
     });
 
@@ -129,8 +145,8 @@ router.get('/messages/:conversationId', authenticateMedicalOfficer, async (req, 
     await ChatMessage.updateMany(
       {
         conversationId,
-        receiverId: medicalOfficerId,
-        receiverType: 'medical_officer',
+        receiverId: userId,
+        receiverType: 'user',
         isRead: false
       },
       {
@@ -152,12 +168,12 @@ router.get('/messages/:conversationId', authenticateMedicalOfficer, async (req, 
   }
 });
 
-// Send message to user
-router.post('/send/:userId', authenticateMedicalOfficer, async (req, res) => {
+// Send message to medical officer
+router.post('/send/:medicalOfficerId', authenticateUser, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { medicalOfficerId } = req.params;
     const { message } = req.body;
-    const medicalOfficerId = req.medicalOfficer._id.toString();
+    const userId = req.user.uid;
 
     if (!message || !message.trim()) {
       return res.status(400).json({
@@ -166,28 +182,28 @@ router.post('/send/:userId', authenticateMedicalOfficer, async (req, res) => {
       });
     }
 
-    // Verify user exists
-    const user = await User.findOne({ uid: userId });
-    if (!user) {
+    // Verify medical officer exists and is active
+    const medicalOfficer = await MedicalOfficer.findById(medicalOfficerId);
+    if (!medicalOfficer || !medicalOfficer.isActive || !medicalOfficer.isApproved) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'Medical officer not found or unavailable'
       });
     }
 
     const conversationId = generateConversationId(
-      medicalOfficerId,
       userId,
-      'medical_officer',
-      'user'
+      medicalOfficerId,
+      'user',
+      'medical_officer'
     );
 
     const newMessage = new ChatMessage({
       conversationId,
-      senderId: medicalOfficerId,
-      senderType: 'medical_officer',
-      receiverId: userId,
-      receiverType: 'user',
+      senderId: userId,
+      senderType: 'user',
+      receiverId: medicalOfficerId,
+      receiverType: 'medical_officer',
       message: message.trim()
     });
 
