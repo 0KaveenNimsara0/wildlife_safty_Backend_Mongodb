@@ -332,8 +332,6 @@ router.get('/firebase-count', authenticateAdmin, async (req, res) => {
   }
 });
 
-module.exports = router;
-
 // Get user statistics
 router.get('/stats/overview', authenticateAdmin, async (req, res) => {
   try {

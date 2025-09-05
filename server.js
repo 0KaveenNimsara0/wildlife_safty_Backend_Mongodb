@@ -322,7 +322,6 @@ app.put('/api/users/:uid', async (req, res) => {
 const reactionRoutes = require('./routes/reactions');
 app.use('/api', reactionRoutes);
 
-// Import admin routes
 const { router: adminAuthRoutes } = require('./routes/adminAuth');
 const adminUserRoutes = require('./routes/adminUsers');
 const adminChatRoutes = require('./routes/adminChat');
@@ -330,7 +329,9 @@ const adminArticlesRoutes = require('./routes/adminArticles');
 const { router: medicalOfficerAuthRoutes } = require('./routes/medicalOfficerAuth');
 const medicalOfficerChatRoutes = require('./routes/medicalOfficerChat');
 const medicalOfficerArticlesRoutes = require('./routes/medicalOfficerArticles');
+const publicArticlesRoutes = require('./routes/publicArticles');
 const userChatRoutes = require('./routes/userChat');
+
 
 // Admin routes
 app.use('/api/admin/auth', adminAuthRoutes);
@@ -342,6 +343,9 @@ app.use('/api/admin/articles', adminArticlesRoutes);
 app.use('/api/medical-officer/auth', medicalOfficerAuthRoutes);
 app.use('/api/medical-officer/chat', medicalOfficerChatRoutes);
 app.use('/api/medical-officer/articles', medicalOfficerArticlesRoutes);
+
+// Public articles route
+app.use('/api/articles', publicArticlesRoutes);
 
 // User chat routes
 app.use('/api/user/chat', userChatRoutes);

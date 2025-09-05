@@ -31,7 +31,7 @@ router.get('/my-articles', authenticateMedicalOfficer, async (req, res) => {
 });
 
 // Create new article
-router.post('/articles', authenticateMedicalOfficer, async (req, res) => {
+router.post('/', authenticateMedicalOfficer, async (req, res) => {
   try {
     const { title, content, excerpt, category, tags, images } = req.body;
     const medicalOfficer = req.medicalOfficer;
@@ -41,6 +41,21 @@ router.post('/articles', authenticateMedicalOfficer, async (req, res) => {
         success: false,
         message: 'Title, content, and category are required'
       });
+    }
+
+    // Validate category enum
+    const validCategories = ['wildlife_safety', 'medical_advice', 'emergency_response', 'prevention', 'treatment'];
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid category. Allowed values are: ${validCategories.join(', ')}`
+      });
+    }
+
+    // Ensure images is an array of objects
+    let processedImages = [];
+    if (Array.isArray(images)) {
+      processedImages = images.filter(img => typeof img === 'object' && img !== null);
     }
 
     const newArticle = new Article({
@@ -53,8 +68,8 @@ router.post('/articles', authenticateMedicalOfficer, async (req, res) => {
         type: 'medical_officer'
       },
       category,
-      tags: tags || [],
-      images: images || [],
+      tags: Array.isArray(tags) ? tags : [],
+      images: processedImages,
       status: 'draft'
     });
 
@@ -75,7 +90,7 @@ router.post('/articles', authenticateMedicalOfficer, async (req, res) => {
 });
 
 // Update article
-router.put('/articles/:articleId', authenticateMedicalOfficer, async (req, res) => {
+router.put('/:articleId', authenticateMedicalOfficer, async (req, res) => {
   try {
     const { articleId } = req.params;
     const { title, content, excerpt, category, tags, images } = req.body;
@@ -128,7 +143,7 @@ router.put('/articles/:articleId', authenticateMedicalOfficer, async (req, res) 
 });
 
 // Submit article for review
-router.post('/articles/:articleId/submit', authenticateMedicalOfficer, async (req, res) => {
+router.post('/:articleId/submit', authenticateMedicalOfficer, async (req, res) => {
   try {
     const { articleId } = req.params;
     const medicalOfficerId = req.medicalOfficer._id.toString();
@@ -174,7 +189,7 @@ router.post('/articles/:articleId/submit', authenticateMedicalOfficer, async (re
 });
 
 // Delete article
-router.delete('/articles/:articleId', authenticateMedicalOfficer, async (req, res) => {
+router.delete('/:articleId', authenticateMedicalOfficer, async (req, res) => {
   try {
     const { articleId } = req.params;
     const medicalOfficerId = req.medicalOfficer._id.toString();
@@ -337,5 +352,7 @@ router.post('/admin/articles/:articleId/publish', authenticateAdmin, async (req,
     });
   }
 });
+
+/* The rest of the file remains unchanged */
 
 module.exports = router;

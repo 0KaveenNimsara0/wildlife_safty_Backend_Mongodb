@@ -67,15 +67,7 @@ router.get('/:articleId', authenticateAdmin, async (req, res) => {
 // Approve article
 router.put('/:articleId/approve', authenticateAdmin, async (req, res) => {
   try {
-    const article = await Article.findByIdAndUpdate(
-      req.params.articleId,
-      {
-        status: 'approved',
-        approvedBy: req.admin._id,
-        approvedAt: new Date()
-      },
-      { new: true }
-    ).populate('author', 'name email');
+    const article = await Article.findById(req.params.articleId);
 
     if (!article) {
       return res.status(404).json({
@@ -83,6 +75,12 @@ router.put('/:articleId/approve', authenticateAdmin, async (req, res) => {
         message: 'Article not found'
       });
     }
+
+    article.status = 'approved';
+    article.approvedBy = req.admin._id;
+    article.approvedAt = new Date();
+
+    await article.save();
 
     res.json({
       success: true,
@@ -103,16 +101,7 @@ router.put('/:articleId/reject', authenticateAdmin, async (req, res) => {
   try {
     const { rejectionReason } = req.body;
 
-    const article = await Article.findByIdAndUpdate(
-      req.params.articleId,
-      {
-        status: 'rejected',
-        rejectionReason: rejectionReason || 'Article rejected by admin',
-        rejectedBy: req.admin._id,
-        rejectedAt: new Date()
-      },
-      { new: true }
-    ).populate('author', 'name email');
+    const article = await Article.findById(req.params.articleId);
 
     if (!article) {
       return res.status(404).json({
@@ -120,6 +109,13 @@ router.put('/:articleId/reject', authenticateAdmin, async (req, res) => {
         message: 'Article not found'
       });
     }
+
+    article.status = 'rejected';
+    article.rejectionReason = rejectionReason || 'Article rejected by admin';
+    article.rejectedBy = req.admin._id;
+    article.rejectedAt = new Date();
+
+    await article.save();
 
     res.json({
       success: true,
@@ -138,7 +134,7 @@ router.put('/:articleId/reject', authenticateAdmin, async (req, res) => {
 // Delete article
 router.delete('/:articleId', authenticateAdmin, async (req, res) => {
   try {
-    const article = await Article.findByIdAndDelete(req.params.articleId);
+    const article = await Article.findById(req.params.articleId);
 
     if (!article) {
       return res.status(404).json({
@@ -146,6 +142,8 @@ router.delete('/:articleId', authenticateAdmin, async (req, res) => {
         message: 'Article not found'
       });
     }
+
+    await Article.findByIdAndDelete(req.params.articleId);
 
     res.json({
       success: true,
@@ -197,3 +195,39 @@ router.get('/status/:status', authenticateAdmin, async (req, res) => {
 });
 
 module.exports = router;
+
+// Admin cancel pending article review
+router.put('/:articleId/cancel-pending', authenticateAdmin, async (req, res) => {
+  try {
+    const article = await Article.findById(req.params.articleId);
+
+    if (!article) {
+      return res.status(404).json({
+        success: false,
+        message: 'Article not found'
+      });
+    }
+
+    if (article.status !== 'pending_review') {
+      return res.status(400).json({
+        success: false,
+        message: 'Article is not in pending review status'
+      });
+    }
+
+    article.status = 'draft';
+    await article.save();
+
+    res.json({
+      success: true,
+      message: 'Pending review cancelled, article reverted to draft',
+      article
+    });
+  } catch (error) {
+    console.error('Cancel pending review error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error cancelling pending review'
+    });
+  }
+});
