@@ -30,6 +30,38 @@ router.get('/my-articles', authenticateMedicalOfficer, async (req, res) => {
   }
 });
 
+// Get single article by ID for medical officer
+router.get('/:articleId', authenticateMedicalOfficer, async (req, res) => {
+  try {
+    const medicalOfficerId = req.medicalOfficer._id.toString();
+    const { articleId } = req.params;
+
+    const article = await Article.findOne({
+      _id: articleId,
+      'author.id': medicalOfficerId,
+      'author.type': 'medical_officer'
+    });
+
+    if (!article) {
+      return res.status(404).json({
+        success: false,
+        message: 'Article not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      article
+    });
+  } catch (error) {
+    console.error('Get article error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 // Create new article
 router.post('/', authenticateMedicalOfficer, async (req, res) => {
   try {
