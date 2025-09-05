@@ -2,8 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const multer = require('multer');
-const cors = require('cors');
+const crypto = require('crypto');
 const path = require('path');
+const cors = require('cors');
 
 const app = express();
 
@@ -25,7 +26,16 @@ const Post = require('./models/Post');
 const Comment = require('./models/Comment');
 const User = require('./models/User');
 
-const storage = multer.memoryStorage();
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, 'uploads'));
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(6).toString('hex');
+    const ext = path.extname(file.originalname);
+    cb(null, uniqueSuffix + ext);
+  }
+});
 
 const upload = multer({ storage });
 
