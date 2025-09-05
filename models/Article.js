@@ -23,6 +23,10 @@ const articleSchema = new mongoose.Schema({
       type: String,
       required: true
     },
+    email: {
+      type: String,
+      required: true
+    },
     type: {
       type: String,
       required: true,
@@ -46,7 +50,7 @@ const articleSchema = new mongoose.Schema({
   status: {
     type: String,
     default: 'draft',
-    enum: ['draft', 'pending_review', 'approved', 'published', 'rejected']
+    enum: ['draft', 'pending', 'pending_review', 'approved', 'published', 'rejected']
   },
   reviewer: {
     id: String,

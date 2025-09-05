@@ -11,6 +11,13 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Logging middleware for debugging routes
+app.use((req, res, next) => {
+  console.log(`Incoming request: ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Connect to MongoDB

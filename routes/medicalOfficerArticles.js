@@ -65,6 +65,7 @@ router.post('/', authenticateMedicalOfficer, async (req, res) => {
       author: {
         id: medicalOfficer._id.toString(),
         name: medicalOfficer.name,
+        email: medicalOfficer.email,
         type: 'medical_officer'
       },
       category,

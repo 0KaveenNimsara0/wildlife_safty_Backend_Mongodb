@@ -11,7 +11,6 @@ router.get('/', authenticateAdmin, async (req, res) => {
     const skip = (page - 1) * limit;
 
     const articles = await Article.find()
-      .populate('author', 'name email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -41,8 +40,7 @@ router.get('/', authenticateAdmin, async (req, res) => {
 // Get article by ID
 router.get('/:articleId', authenticateAdmin, async (req, res) => {
   try {
-    const article = await Article.findById(req.params.articleId)
-      .populate('author', 'name email');
+    const article = await Article.findById(req.params.articleId);
 
     if (!article) {
       return res.status(404).json({
@@ -76,9 +74,10 @@ router.put('/:articleId/approve', authenticateAdmin, async (req, res) => {
       });
     }
 
-    article.status = 'approved';
+    article.status = 'published';
     article.approvedBy = req.admin._id;
     article.approvedAt = new Date();
+    article.publishedAt = new Date();
 
     await article.save();
 
@@ -167,7 +166,6 @@ router.get('/status/:status', authenticateAdmin, async (req, res) => {
     const skip = (page - 1) * limit;
 
     const articles = await Article.find({ status })
-      .populate('author', 'name email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -193,8 +191,6 @@ router.get('/status/:status', authenticateAdmin, async (req, res) => {
     });
   }
 });
-
-module.exports = router;
 
 // Admin cancel pending article review
 router.put('/:articleId/cancel-pending', authenticateAdmin, async (req, res) => {
@@ -231,3 +227,149 @@ router.put('/:articleId/cancel-pending', authenticateAdmin, async (req, res) => 
     });
   }
 });
+
+// Unpublish article
+router.put('/:articleId/unpublish', authenticateAdmin, async (req, res) => {
+  try {
+    const article = await Article.findById(req.params.articleId);
+
+    if (!article) {
+      return res.status(404).json({
+        success: false,
+        message: 'Article not found'
+      });
+    }
+
+    if (article.status !== 'published') {
+      return res.status(400).json({
+        success: false,
+        message: 'Article is not published'
+      });
+    }
+
+    article.status = 'draft';
+    article.publishedAt = null;
+    await article.save();
+
+    res.json({
+      success: true,
+      message: 'Article unpublished successfully',
+      article
+    });
+  } catch (error) {
+    console.error('Unpublish article error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error unpublishing article'
+    });
+  }
+});
+
+// Publish approved article
+router.put('/:articleId/publish', authenticateAdmin, async (req, res) => {
+  try {
+    const article = await Article.findById(req.params.articleId);
+
+    if (!article) {
+      return res.status(404).json({
+        success: false,
+        message: 'Article not found'
+      });
+    }
+
+    if (article.status !== 'approved') {
+      return res.status(400).json({
+        success: false,
+        message: 'Article is not approved'
+      });
+    }
+
+    // Fix author field if missing email
+    if (!article.author.email) {
+      const authorEmail = await getAuthorEmail(article.author.id, article.author.type);
+      if (authorEmail) {
+        article.author.email = authorEmail;
+      }
+    }
+
+    article.status = 'published';
+    article.publishedAt = new Date();
+    await article.save();
+
+    res.json({
+      success: true,
+      message: 'Article published successfully',
+      article
+    });
+  } catch (error) {
+    console.error('Publish article error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error publishing article'
+    });
+  }
+});
+
+// Helper function to get author email by id and type
+async function getAuthorEmail(authorId, authorType) {
+  try {
+    if (authorType === 'medical_officer') {
+      const MedicalOfficer = require('../models/MedicalOfficer');
+      const mo = await MedicalOfficer.findById(authorId);
+      return mo ? mo.email : null;
+    } else if (authorType === 'admin') {
+      const Admin = require('../models/Admin');
+      const admin = await Admin.findById(authorId);
+      return admin ? admin.email : null;
+    }
+    return null;
+  } catch (err) {
+    console.error('Error fetching author email:', err);
+    return null;
+  }
+}
+
+// Send rejected article for re-review
+router.put('/:articleId/re-review', authenticateAdmin, async (req, res) => {
+  try {
+    const article = await Article.findById(req.params.articleId);
+
+    if (!article) {
+      return res.status(404).json({
+        success: false,
+        message: 'Article not found'
+      });
+    }
+
+    if (article.status !== 'rejected') {
+      return res.status(400).json({
+        success: false,
+        message: 'Article is not rejected'
+      });
+    }
+
+    // Preserve author field explicitly
+    const author = article.author;
+
+    article.status = 'pending';
+    article.rejectionReason = null;
+    article.rejectedBy = null;
+    article.rejectedAt = null;
+    article.author = author; // preserve author
+    await article.save();
+
+    res.json({
+      success: true,
+      message: 'Article sent for re-review successfully',
+      article
+    });
+  } catch (error) {
+    console.error('Re-review article error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error sending article for re-review'
+    });
+  }
+});
+
+module.exports = router;
