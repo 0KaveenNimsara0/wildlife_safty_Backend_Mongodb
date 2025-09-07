@@ -1,6 +1,6 @@
 const express = require('express');
 const Article = require('../models/Article');
-const { authenticateMedicalOfficer } = require('./medicalOfficerAuth');
+const { authenticateMedicalOfficer } = require('../middleware/auth_medical_officer');
 const { authenticateAdmin } = require('./adminAuth');
 
 const router = express.Router();

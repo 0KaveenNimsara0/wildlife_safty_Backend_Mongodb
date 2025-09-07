@@ -2,7 +2,7 @@ const admin = require('firebase-admin');
 const path = require('path');
 
 // Replace 'your-service-account-file.json' with the actual filename of your Firebase service account JSON file
-const serviceAccount = require(path.join(__dirname, './src/assets/wildlifesafty-firebase-adminsdk-fbsvc-91a2ee6cf3.json'));
+const serviceAccount = require(path.join(__dirname, './src/assets/wildlifesafty-firebase-adminsdk-fbsvc-1d938adaf5.json'));
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),

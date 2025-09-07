@@ -1,13 +1,14 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const MedicalOfficer = require('../models/MedicalOfficer');
+const { authenticateMedicalOfficer } = require('../middleware/auth_medical_officer');
 
 const router = express.Router();
 
 // Generate JWT token
 const generateToken = (medicalOfficerId) => {
   return jwt.sign({ medicalOfficerId }, process.env.JWT_SECRET || 'your-secret-key', {
-    expiresIn: '24h'
+    expiresIn: '30d'
   });
 };
 
@@ -144,37 +145,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Verify token middleware
-const authenticateMedicalOfficer = async (req, res, next) => {
-  try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
 
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'No token provided'
-      });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-    const medicalOfficer = await MedicalOfficer.findById(decoded.medicalOfficerId);
-
-    if (!medicalOfficer || !medicalOfficer.isActive || !medicalOfficer.isApproved) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid token or medical officer not approved'
-      });
-    }
-
-    req.medicalOfficer = medicalOfficer;
-    next();
-  } catch (error) {
-    res.status(401).json({
-      success: false,
-      message: 'Invalid token'
-    });
-  }
-};
 
 // Get current medical officer profile
 router.get('/profile', authenticateMedicalOfficer, async (req, res) => {
