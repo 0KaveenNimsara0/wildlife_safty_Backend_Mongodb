@@ -2,8 +2,25 @@ const express = require('express');
 const ChatMessage = require('../models/ChatMessage');
 const User = require('../models/User');
 const { authenticateMedicalOfficer } = require('../middleware/auth_medical_officer');
+const admin = require('../firebaseAdmin');
 
 const router = express.Router();
+
+// Helper function to get user data from Firebase
+async function getUserFromFirebase(uid) {
+  try {
+    const userRecord = await admin.auth().getUser(uid);
+    return {
+      uid: userRecord.uid,
+      email: userRecord.email,
+      displayName: userRecord.displayName || userRecord.email,
+      photoURL: userRecord.photoURL || null
+    };
+  } catch (error) {
+    console.error('Error fetching user from Firebase:', error);
+    return null;
+  }
+}
 
 // Helper function to generate conversation ID
 const generateConversationId = (senderId, receiverId, senderType, receiverType) => {
@@ -69,16 +86,21 @@ router.get('/conversations', authenticateMedicalOfficer, async (req, res) => {
           userId = lastMessage.receiverId;
         }
 
-        const mongoose = require('mongoose');
         if (userId) {
-          let user = null;
-          // Check if userId is a valid ObjectId
-          if (mongoose.Types.ObjectId.isValid(userId)) {
-            user = await User.findOne({ _id: userId }).select('displayName email photoURL uid');
-          }
+          // Try to get user from Firebase first
+          let user = await getUserFromFirebase(userId);
+
+          // If not found in Firebase, try MongoDB as fallback
           if (!user) {
-            user = await User.findOne({ uid: userId }).select('displayName email photoURL uid');
+            const mongoose = require('mongoose');
+            if (mongoose.Types.ObjectId.isValid(userId)) {
+              user = await User.findOne({ _id: userId }).select('displayName email photoURL uid');
+            }
+            if (!user) {
+              user = await User.findOne({ uid: userId }).select('displayName email photoURL uid');
+            }
           }
+
           conv.user = user;
         }
 
@@ -166,8 +188,8 @@ router.post('/send/:userId', authenticateMedicalOfficer, async (req, res) => {
       });
     }
 
-    // Verify user exists
-    const user = await User.findOne({ uid: userId });
+    // Verify user exists in Firebase
+    const user = await getUserFromFirebase(userId);
     if (!user) {
       return res.status(404).json({
         success: false,
